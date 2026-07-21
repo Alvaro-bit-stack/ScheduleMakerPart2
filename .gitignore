@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+
+# Local virtual environments
+venv/
+.venv/
+env/
+.env/
+Schedule_Project/schedule_backend/Include/
+Schedule_Project/schedule_backend/Lib/
+Schedule_Project/schedule_backend/Scripts/
+schedule_backend/Include/
+schedule_backend/Lib/
+schedule_backend/Scripts/
+schedule_backend/pyvenv.cfg
+
+# Secrets
+schedule_backend/creds.json
+schedule_backend/api_json.json
+schedule_backend/token.json
+.env
+
+# Node
+schedule_frontend/node_modules/
+schedule_frontend/.next/
+**/.DS_Store
+
