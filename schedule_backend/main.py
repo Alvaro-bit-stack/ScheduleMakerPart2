@@ -15,10 +15,16 @@ app.add_middleware(
 )
 
 @app.post("/api/upload")
-async def upload_schedule(fileUpload: UploadFile = File(...), user_token: str = Form(...),timezone:str=Form(...), refresh_token: str = Form(...), pallete: str = Form(...)):
+async def upload_schedule(
+    fileUpload: UploadFile = File(...),
+    user_token: str = Form(...),
+    timezone: str = Form(...),
+    refresh_token: str = Form(...),
+    palette: str = Form(None),
+):
     content = await fileUpload.read()  # frontend image bytes
-    ocr_response =run_ocr(content)
+    ocr_response = run_ocr(content)
     class_info = extract_classes(content, ocr_response)
-    set_up_and_create_events(timezone,user_token,refresh_token,class_info,pallete)
-    #create_events(timezone,user_token,refresh_token, class_info)
+    set_up_and_create_events(timezone, user_token, refresh_token, class_info, palette)
     return {"status": "ok", "classes": class_info}
+
