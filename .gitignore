@@ -20,6 +20,8 @@ schedule_backend/creds.json
 schedule_backend/api_json.json
 schedule_backend/token.json
 .env
+**/.env.*
+!**/.env.example
 
 # Node
 schedule_frontend/node_modules/

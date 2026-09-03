@@ -19,11 +19,11 @@ FastAPI backend that OCRs a schedule image, parses classes, and creates Google C
    ```bash
    pip install -r requirements.txt
    ```
-3. Set credentials files in `schedule_backend/`:
-   - `creds.json` for Google OAuth client
-   - `api_json.json` for Google Vision service account
-4. Set environment variables (OpenAI):
-   - `OPENAI_API_KEY` in your shell or a `.env` at repo root
+3. Set the Google Vision service-account file:
+   - `api_json.json`, or configure `GOOGLE_VISION_CREDS_FILE`
+4. Copy `.env.example` to `.env` and configure:
+   - `OPENAI_API_KEY`
+   - `INTERNAL_API_KEY`, matching the frontend server
 
 ### Run
 ```bash
@@ -33,3 +33,5 @@ uvicorn main:app --reload --port 8001 --host 0.0.0.0
 ### Notes
 - The repository ignores any local `venv/`, `Lib/`, and `Scripts/` folders so they are not committed.
 - Keep secrets out of version control. See `.gitignore` at repo root.
+- The backend upload endpoint only accepts authenticated server-to-server
+  requests from the Next.js proxy.

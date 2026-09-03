@@ -1,56 +1,97 @@
 # CalSnap — Schedule screenshot → Google Calendar
 
-Upload a screenshot of your class schedule and CalSnap reads it (OCR + GPT-4o),
-then creates recurring, **color-themed** events in your Google Calendar.
+CalSnap turns a class-schedule screenshot into recurring, color-themed Google
+Calendar events.
 
-- **`schedule_frontend/`** — Next.js 15 + React 19 + Tailwind v4. Handles Google
-  OAuth, the upload form, and the color-theme picker.
-- **`schedule_backend/`** — FastAPI. Runs OCR (Google Cloud Vision), extracts
-  classes with OpenAI, and creates the calendar events.
+- **`schedule_frontend/`** — Next.js, React, and Tailwind. Handles the landing
+  page, Google OAuth, the upload form, encrypted short-lived sessions, and the
+  protected backend proxy.
+- **`schedule_backend/`** — FastAPI. Validates images, runs Google Cloud Vision
+  OCR, extracts classes with OpenAI, and creates Calendar events.
 
-## How the color themes work
+## Google Calendar access
 
-Google Calendar events only support **11 fixed colors**. Each theme's palette
-(arbitrary hex) is mapped to the nearest Google event color, and your classes
-**cycle through the palette** so the schedule shows the theme's spread of colors.
-Events are added to your **primary** calendar (only needs the `calendar.events`
-OAuth scope). See `schedule_backend/google_calendar.py`.
+CalSnap requests
+`https://www.googleapis.com/auth/calendar.events.owned`, which is narrower than
+full Calendar access and limits event management to calendars the user owns.
+The current implementation:
 
-## Setup
+- validates OAuth `state` and uses PKCE;
+- keeps access tokens out of URLs, JavaScript, and `localStorage`;
+- stores the access token in an encrypted, HttpOnly, short-lived cookie;
+- does not request or retain a refresh token;
+- provides disconnect and token-revocation controls.
 
-### Backend (`schedule_backend/`)
+## Local setup
 
-```bash
-cd schedule_backend
-python -m venv .venv && .venv\Scripts\activate      # Windows
+### Backend
+
+```powershell
+Set-Location schedule_backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-Provide these files/vars (all git-ignored):
-- `creds.json` — Google OAuth client (Desktop or Web) with `client_id` + `client_secret`, used to refresh the user's token.
-- `api_json.json` — Google Cloud Vision service-account key (for OCR).
-- `.env` — copy from `.env.example`, set `OPENAI_API_KEY`.
+Configure:
+
+- `OPENAI_API_KEY`
+- `INTERNAL_API_KEY`
+- `GOOGLE_VISION_CREDS_FILE`
+
+Keep the Google Cloud Vision service-account JSON outside version control.
 
 Run:
-```bash
+
+```powershell
 uvicorn main:app --reload --port 8000
 ```
 
-### Frontend (`schedule_frontend/`)
+### Frontend
 
-```bash
-cd schedule_frontend
+```powershell
+Set-Location schedule_frontend
 npm install
-cp .env.example .env.local   # then fill in the values
-npm run dev                  # http://localhost:3000
+Copy-Item .env.example .env.local
+npm run dev
 ```
 
-In Google Cloud Console, add `http://localhost:3000/api/google/callback` as an
-authorized redirect URI for your OAuth client.
+Configure:
 
-## Flow
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+- `APP_URL`
+- `BACKEND_URL`
+- `OAUTH_SESSION_SECRET`
+- `INTERNAL_API_KEY`, matching the backend value
 
-1. Landing page → **Connect with Google** (OAuth, `calendar.events` scope).
-2. `/form` → pick timezone, upload the schedule image, pick a color theme.
-3. Submit → the image + tokens + chosen palette POST to the backend
-   (`/api/upload`), which OCRs, extracts classes, and creates the events.
+Add `http://localhost:3000/api/google/callback` as an authorized redirect URI
+for local development.
+
+## Request flow
+
+1. The user reviews the Calendar and schedule-processing disclosure at
+   `/connect`.
+2. Google OAuth returns to the callback with validated `state` and PKCE.
+3. The callback stores only an encrypted, HttpOnly access-token session cookie.
+4. `/form` sends the schedule image to the same-origin `/api/schedule` route.
+5. Next.js validates the request and forwards it to FastAPI with a server-only
+   internal API key.
+6. FastAPI validates the image, extracts classes, and creates events without
+   logging tokens, schedules, locations, or event links.
+
+## Google production verification checklist
+
+Before submitting the OAuth app:
+
+1. Deploy the frontend and backend using HTTPS.
+2. Verify the production domain in Google Search Console.
+3. Configure the exact production callback URI.
+4. Add the deployed homepage, privacy policy, and terms URLs to the OAuth
+   consent-screen configuration.
+5. Ensure the app name, branding, support contact, and requested scope exactly
+   match the deployed app.
+6. Record an unedited demonstration showing the homepage, disclosure, complete
+   OAuth consent screen, upload flow, and resulting Calendar events.
+7. Explain why `calendar.events.owned` is necessary to create recurring events
+   on the user's primary calendar.

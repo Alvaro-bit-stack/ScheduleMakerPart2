@@ -1,40 +1,92 @@
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { google } from "googleapis";
+import {
+  createGoogleOAuthClient,
+  getAppUrl,
+  GOOGLE_CALENDAR_SCOPE,
+} from "@/lib/google-oauth";
+import {
+  encryptOAuthSession,
+  OAUTH_PKCE_COOKIE,
+  OAUTH_SESSION_COOKIE,
+  OAUTH_STATE_COOKIE,
+  oauthCookieOptions,
+  secureValuesMatch,
+} from "@/lib/oauth-session";
 
-console.log("Callback API LOADED");
+export const runtime = "nodejs";
 
-export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
-  const code = url.searchParams.get("code");
+function clearAuthorizationCookies(response: NextResponse) {
+  response.cookies.set(OAUTH_STATE_COOKIE, "", oauthCookieOptions(0));
+  response.cookies.set(OAUTH_PKCE_COOKIE, "", oauthCookieOptions(0));
+}
 
-  if (!code) {
-    console.error("No code provided");
-    return NextResponse.redirect(new URL("/error?message=No code provided", req.url));
+function redirectToConnect(error: string) {
+  return NextResponse.redirect(
+    new URL(`/connect?error=${encodeURIComponent(error)}`, getAppUrl()),
+  );
+}
+
+export async function GET(request: NextRequest) {
+  const requestUrl = new URL(request.url);
+  const code = requestUrl.searchParams.get("code");
+  const state = requestUrl.searchParams.get("state");
+  const oauthError = requestUrl.searchParams.get("error");
+  const cookieStore = await cookies();
+  const expectedState = cookieStore.get(OAUTH_STATE_COOKIE)?.value;
+  const codeVerifier = cookieStore.get(OAUTH_PKCE_COOKIE)?.value;
+
+  if (oauthError) {
+    const response = redirectToConnect("authorization_denied");
+    clearAuthorizationCookies(response);
+    return response;
   }
 
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    `${process.env.NEXT_PUBLIC_URL}/api/google/callback`
-  );
+  if (
+    !code ||
+    !state ||
+    !expectedState ||
+    !codeVerifier ||
+    !secureValuesMatch(state, expectedState)
+  ) {
+    const response = redirectToConnect("invalid_authorization");
+    clearAuthorizationCookies(response);
+    return response;
+  }
 
   try {
-    console.log("Exchanging code for tokens with code:", code);
-    const { tokens } = await oauth2Client.getToken(code);
-    console.log("Tokens received:", tokens);
+    const oauth2Client = createGoogleOAuthClient();
+    const { tokens } = await oauth2Client.getToken({ code, codeVerifier });
+    const grantedScopes = new Set(tokens.scope?.split(/\s+/).filter(Boolean));
 
-    oauth2Client.setCredentials(tokens);
-    // TODO: store tokens in database here
+    if (
+      !tokens.access_token ||
+      (grantedScopes.size > 0 && !grantedScopes.has(GOOGLE_CALENDAR_SCOPE))
+    ) {
+      const response = redirectToConnect("missing_permission");
+      clearAuthorizationCookies(response);
+      return response;
+    }
 
-    console.log("Redirecting to /form...");
-    return NextResponse.redirect(
-      new URL(
-        `/form?access_token=${tokens.access_token}&refresh_token=${tokens.refresh_token}`,
-        req.url
-      )
+    const expiresAt = tokens.expiry_date ?? Date.now() + 55 * 60 * 1000;
+    const maxAge = Math.max(
+      60,
+      Math.min(60 * 60, Math.floor((expiresAt - Date.now()) / 1000)),
     );
-  } catch (error: any) {
-    console.error("Google auth error:", error.response?.data || error.message);
-    return NextResponse.redirect(new URL("/error?message=Google auth failed", req.url));
+    const response = NextResponse.redirect(new URL("/form", getAppUrl()));
+    response.cookies.set(
+      OAUTH_SESSION_COOKIE,
+      encryptOAuthSession({
+        accessToken: tokens.access_token,
+        expiresAt,
+      }),
+      oauthCookieOptions(maxAge),
+    );
+    clearAuthorizationCookies(response);
+    return response;
+  } catch {
+    const response = redirectToConnect("authorization_failed");
+    clearAuthorizationCookies(response);
+    return response;
   }
 }

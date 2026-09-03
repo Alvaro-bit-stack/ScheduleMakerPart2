@@ -1,20 +1,42 @@
-import { google } from "googleapis";
+import { randomBytes } from "node:crypto";
+import { CodeChallengeMethod } from "google-auth-library";
 import { NextResponse } from "next/server";
+import {
+  createGoogleOAuthClient,
+  GOOGLE_CALENDAR_SCOPE,
+} from "@/lib/google-oauth";
+import {
+  OAUTH_PKCE_COOKIE,
+  OAUTH_STATE_COOKIE,
+  oauthCookieOptions,
+} from "@/lib/oauth-session";
+
+export const runtime = "nodejs";
 
 export async function GET() {
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    `${process.env.NEXT_PUBLIC_URL}/api/google/callback`
-  );
+  const oauth2Client = createGoogleOAuthClient();
+  const state = randomBytes(32).toString("base64url");
+  const { codeVerifier, codeChallenge } =
+    await oauth2Client.generateCodeVerifierAsync();
 
-  const scopes = ["https://www.googleapis.com/auth/calendar.events"];
-
-  const url = oauth2Client.generateAuthUrl({
-    access_type: "offline", // allows refresh token
-    prompt: "consent", // always ask for consent
-    scope: scopes,
+  const authorizationUrl = oauth2Client.generateAuthUrl({
+    access_type: "online",
+    scope: [GOOGLE_CALENDAR_SCOPE],
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: CodeChallengeMethod.S256,
   });
 
-  return NextResponse.redirect(url);
+  const response = NextResponse.redirect(authorizationUrl);
+  response.cookies.set(
+    OAUTH_STATE_COOKIE,
+    state,
+    oauthCookieOptions(10 * 60),
+  );
+  response.cookies.set(
+    OAUTH_PKCE_COOKIE,
+    codeVerifier,
+    oauthCookieOptions(10 * 60),
+  );
+  return response;
 }

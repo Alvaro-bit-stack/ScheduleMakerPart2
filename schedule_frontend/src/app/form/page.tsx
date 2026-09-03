@@ -1,6 +1,9 @@
 "use client";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
+
+import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Loading from "./loading";
 
 type Palette = {
@@ -9,8 +12,6 @@ type Palette = {
   image?: string;
 };
 
-// Color themes. `colors` drive the actual Google Calendar event colors; each
-// class cycles through the palette so your schedule reflects the theme.
 const PALETTES: Palette[] = [
   {
     name: "Howls Moving Castle",
@@ -33,322 +34,730 @@ const PALETTES: Palette[] = [
 ];
 
 const TIMEZONES = [
-  { label: "America/New_York", value: "America/New_York" },
-  { label: "America/Chicago", value: "America/Chicago" },
-  { label: "America/Denver", value: "America/Denver" },
-  { label: "America/Los_Angeles", value: "America/Los_Angeles" },
-  { label: "Europe/London", value: "Europe/London" },
-  { label: "Asia/Tokyo", value: "Asia/Tokyo" },
+  { label: "Eastern time", value: "America/New_York" },
+  { label: "Central time", value: "America/Chicago" },
+  { label: "Mountain time", value: "America/Denver" },
+  { label: "Pacific time", value: "America/Los_Angeles" },
+  { label: "London time", value: "Europe/London" },
+  { label: "Tokyo time", value: "Asia/Tokyo" },
 ];
 
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
-
-function FormInner() {
+export default function Form() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const statusRef = useRef<HTMLDivElement>(null);
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fileType, setFileType] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedPalette, setSelectedPalette] = useState<Palette | null>(null);
+  const [selectedTimezone, setSelectedTimezone] = useState(TIMEZONES[0].value);
   const [status, setStatus] = useState<
     { kind: "success" | "error"; message: string } | null
   >(null);
 
   useEffect(() => {
-    const accessToken = searchParams.get("access_token");
-    const refreshToken = searchParams.get("refresh_token");
-
-    if (accessToken) localStorage.setItem("google_access_token", accessToken);
-    if (refreshToken)
-      localStorage.setItem("google_refresh_token", refreshToken);
-
-    if (accessToken || refreshToken) {
-      router.replace("/form");
+    const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (TIMEZONES.some((timezone) => timezone.value === browserTimezone)) {
+      const updateTimezone = window.setTimeout(
+        () => setSelectedTimezone(browserTimezone),
+        0,
+      );
+      return () => window.clearTimeout(updateTimezone);
     }
-  }, [searchParams, router]);
+  }, []);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  useEffect(() => {
+    if (status?.kind === "error") {
+      statusRef.current?.focus();
+    }
+  }, [status]);
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setPreviewUrl(null);
+      setFileType(null);
+      setFileName(null);
+      return;
+    }
+
+    setFileError(null);
+    setFileName(file.name);
+    setFileType(file.type);
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-      setPreviewUrl(event.target?.result as string);
-      setFileType(file.type);
+    reader.onload = (readerEvent) => {
+      setPreviewUrl(readerEvent.target?.result as string);
     };
     reader.readAsDataURL(file);
   }
 
-  const handleMissingToken = () => {
-    window.location.href = "/api/google/auth";
-  };
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setStatus(null);
+    setFileError(null);
 
-    const formData = new FormData(e.currentTarget);
-    const userToken = localStorage.getItem("google_access_token");
-    const refreshToken = localStorage.getItem("google_refresh_token");
+    const formData = new FormData(event.currentTarget);
+    const scheduleFile = formData.get("fileUpload");
 
-    if (!userToken || !refreshToken) {
-      handleMissingToken();
+    if (!(scheduleFile instanceof File) || !scheduleFile.size) {
+      setFileError("Choose a schedule screenshot before creating your calendar.");
+      fileInputRef.current?.focus();
       return;
     }
 
-    if (!formData.get("fileUpload") || !(formData.get("fileUpload") as File).size) {
-      setStatus({ kind: "error", message: "Please upload a schedule image first." });
-      return;
-    }
-
-    formData.append("user_token", userToken);
-    formData.append("refresh_token", refreshToken);
-
-    // Send the full palette (name + colors) so the backend can map the theme
-    // to Google Calendar event colors.
     if (selectedPalette) {
       formData.append("palette", JSON.stringify(selectedPalette));
     }
 
     setLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/upload`, {
+      const response = await fetch("/api/schedule", {
         method: "POST",
         body: formData,
       });
+      const data: unknown = await response.json();
 
-      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+      if (response.status === 401) {
+        router.push("/connect?error=session_expired");
+        return;
+      }
 
-      const data = await res.json();
-      const count = Array.isArray(data.classes) ? data.classes.length : 0;
+      if (!response.ok) {
+        const message =
+          typeof data === "object" &&
+          data !== null &&
+          "error" in data &&
+          typeof data.error === "string"
+            ? data.error
+            : "The schedule could not be processed. Please try again.";
+        throw new Error(message);
+      }
+
+      const count =
+        typeof data === "object" &&
+        data !== null &&
+        "count" in data &&
+        typeof data.count === "number"
+          ? data.count
+          : 0;
       setStatus({
         kind: "success",
         message: `Synced ${count} class${count === 1 ? "" : "es"} to your Google Calendar${
           selectedPalette ? ` in the ${selectedPalette.name} theme` : ""
         }.`,
       });
-    } catch (err) {
+    } catch (error) {
       setStatus({
         kind: "error",
         message:
-          err instanceof Error
-            ? `${err.message}. Is the backend running at ${BACKEND_URL}?`
-            : "Something went wrong.",
+          error instanceof Error
+            ? error.message
+            : "Something went wrong while creating your calendar.",
       });
     } finally {
       setLoading(false);
     }
   }
 
-  if (loading) return <Loading />;
+  const timezoneLabel =
+    TIMEZONES.find((timezone) => timezone.value === selectedTimezone)?.label ??
+    selectedTimezone;
+
+  if (loading) {
+    return <Loading />;
+  }
 
   return (
-    <form
-      className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 px-6 py-10"
-      onSubmit={handleSubmit}
-      aria-labelledby="formTitle"
-    >
-      <div className="mx-auto max-w-5xl grid gap-10 lg:grid-cols-2">
-        {/* Left column: steps */}
-        <div className="space-y-6">
-          <div className="rounded-2xl ring-1 ring-white/10 bg-white/[0.03] p-6">
-            <h1 id="formTitle" className="text-2xl font-semibold tracking-tight">
-              Setup your calendar
-            </h1>
-            <p className="mt-2 text-slate-300 text-sm">
-              Follow the steps and submit to sync to Google Calendar.
+    <div className="form-page relative min-h-screen overflow-x-hidden bg-[var(--landing-bg)] font-sans text-[var(--landing-ink)]">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-32 top-44 h-72 w-72 rounded-[42%_58%_63%_37%/55%_38%_62%_45%] bg-[var(--landing-sage)]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-24 top-12 h-64 w-64 rounded-[61%_39%_32%_68%/45%_55%_45%_55%] bg-[var(--landing-clay-soft)]"
+      />
+
+      <header className="relative z-20 border-b border-[var(--landing-border)] bg-[var(--landing-bg)]/90">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8 lg:px-10">
+          <Link
+            href="/"
+            className="flex min-h-11 items-center gap-3 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--landing-focus)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--landing-bg)]"
+            aria-label="Back to CalSnap home"
+          >
+            <BrandMark />
+            <span className="text-lg font-semibold tracking-[-0.03em]">CalSnap</span>
+          </Link>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/privacy"
+              className="hidden min-h-11 items-center rounded-full px-4 py-2 text-sm font-semibold text-[var(--landing-forest)] transition-colors duration-200 hover:bg-[var(--landing-sage)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--landing-focus)] sm:inline-flex"
+            >
+              Privacy
+            </Link>
+            <form action="/api/google/disconnect" method="post">
+              <button
+                type="submit"
+                className="inline-flex min-h-11 cursor-pointer items-center rounded-full px-4 py-2 text-sm font-semibold text-[var(--landing-clay-dark)] transition-colors duration-200 hover:bg-[var(--landing-clay-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--landing-focus)]"
+              >
+                Disconnect
+              </button>
+            </form>
+            <Link
+              href="/"
+              className="hidden min-h-11 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-[var(--landing-forest)] transition-colors duration-200 hover:bg-[var(--landing-sage)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--landing-focus)] md:inline-flex"
+            >
+              <BackIcon />
+              Back home
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <main className="relative z-10">
+        <form
+          className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16 lg:px-10 lg:py-20"
+          onSubmit={handleSubmit}
+          aria-labelledby="form-title"
+          aria-busy={loading}
+        >
+          <div className="mb-10 max-w-2xl sm:mb-12">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--landing-clay-dark)]">
+              Calendar setup
             </p>
+            <h1
+              id="form-title"
+              className="mt-4 text-balance text-4xl font-semibold leading-tight tracking-[-0.045em] sm:text-5xl"
+            >
+              Turn your screenshot into a semester.
+            </h1>
+            <p className="mt-4 max-w-xl text-lg leading-8 text-[var(--landing-muted)]">
+              Choose where the events belong, upload your schedule, and give
+              your calendar a color theme.
+            </p>
+          </div>
 
-            <ol className="mt-6 space-y-6 text-sm">
-              {/* Step 1: timezone */}
-              <li className="flex gap-3 items-start">
-                <StepBadge n={1} />
-                <div className="w-full">
-                  <div className="font-medium">Choose your timezone</div>
-                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {TIMEZONES.map((tz, i) => (
-                      <label
-                        key={tz.value}
-                        className="group flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2 text-slate-200 hover:bg-white/[0.05] transition cursor-pointer has-[:checked]:border-blue-400/60 has-[:checked]:bg-blue-500/10"
-                      >
-                        <input
-                          type="radio"
-                          name="timezone"
-                          value={tz.value}
-                          defaultChecked={i === 0}
-                          className="accent-blue-500"
-                        />
-                        <span className="text-sm">{tz.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </li>
+          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)] lg:gap-10">
+            <div className="space-y-5 sm:space-y-6">
+              <section className="rounded-[2rem] border border-[var(--landing-border-strong)] bg-[var(--landing-surface)] p-5 sm:p-7">
+                <StepHeading
+                  number="01"
+                  title="Set your timezone"
+                  description="This keeps every class on the correct local day and time."
+                />
 
-              {/* Step 2: upload */}
-              <li className="flex gap-3 items-start">
-                <StepBadge n={2} />
-                <div className="w-full">
-                  <div className="font-medium">Upload your schedule screenshot</div>
-                  <label htmlFor="fileUpload" className="mt-2 block text-slate-300">
-                    Choose your file:
+                <div className="mt-6">
+                  <label
+                    htmlFor="timezone"
+                    className="text-sm font-semibold text-[var(--landing-ink)]"
+                  >
+                    Calendar timezone
                   </label>
+                  <div className="relative mt-2">
+                    <select
+                      id="timezone"
+                      name="timezone"
+                      value={selectedTimezone}
+                      onChange={(event) => setSelectedTimezone(event.target.value)}
+                      className="min-h-12 w-full appearance-none rounded-2xl border border-[var(--landing-border-strong)] bg-[var(--landing-bg)] px-4 py-3 pr-11 text-base text-[var(--landing-ink)] outline-none transition-colors duration-200 hover:border-[var(--landing-forest)] focus:border-[var(--landing-forest)] focus:ring-2 focus:ring-[var(--landing-focus)] focus:ring-offset-2"
+                    >
+                      {TIMEZONES.map((timezone) => (
+                        <option key={timezone.value} value={timezone.value}>
+                          {timezone.label} — {timezone.value}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronIcon />
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-[var(--landing-muted)]">
+                    We select your browser timezone when it matches an available
+                    option.
+                  </p>
+                </div>
+              </section>
+
+              <section className="rounded-[2rem] border border-[var(--landing-border-strong)] bg-[var(--landing-surface)] p-5 sm:p-7">
+                <StepHeading
+                  number="02"
+                  title="Upload your schedule"
+                  description="A clear screenshot with visible class names, days, times, and rooms works best."
+                />
+
+                <div className="mt-6 rounded-2xl border border-dashed border-[var(--landing-border-strong)] bg-[var(--landing-bg)] p-4 sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--landing-sage)] text-[var(--landing-forest)]">
+                      <UploadIcon />
+                    </span>
+                    <div>
+                      <label
+                        htmlFor="fileUpload"
+                        className="text-sm font-semibold text-[var(--landing-ink)]"
+                      >
+                        Schedule screenshot
+                      </label>
+                      <p
+                        id="file-help"
+                        className="mt-1 text-sm leading-6 text-[var(--landing-muted)]"
+                      >
+                        Choose a PNG, JPG, or WebP image up to 10 MB.
+                      </p>
+                    </div>
+                  </div>
+
                   <input
+                    ref={fileInputRef}
                     type="file"
                     id="fileUpload"
                     name="fileUpload"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/webp"
                     onChange={handleFileChange}
-                    className="mt-2 block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-white/10 file:text-white hover:file:bg-white/20 cursor-pointer"
+                    aria-describedby={`file-help${fileError ? " file-error" : ""}`}
+                    aria-invalid={Boolean(fileError)}
+                    className="mt-5 block min-h-12 w-full cursor-pointer rounded-xl border border-[var(--landing-border)] bg-[var(--landing-surface)] text-sm text-[var(--landing-muted)] outline-none file:mr-4 file:min-h-11 file:cursor-pointer file:rounded-xl file:border-0 file:bg-[var(--landing-forest)] file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-[var(--landing-ink)] focus:ring-2 focus:ring-[var(--landing-focus)] focus:ring-offset-2"
                   />
-                  {previewUrl && fileType?.startsWith("image/") && (
-                    <div className="mt-4">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+
+                  {fileError && (
+                    <p
+                      id="file-error"
+                      role="alert"
+                      className="mt-3 text-sm font-semibold text-[var(--landing-clay-dark)]"
+                    >
+                      {fileError}
+                    </p>
+                  )}
+                </div>
+
+                {previewUrl && fileType?.startsWith("image/") && (
+                  <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--landing-border)] bg-[var(--landing-bg)]">
+                    <div className="flex items-center justify-between gap-4 border-b border-[var(--landing-border)] px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--landing-muted)]">
+                          Selected image
+                        </p>
+                        <p className="mt-1 truncate text-sm font-semibold">
+                          {fileName}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-[var(--landing-sage)] px-3 py-1 text-xs font-semibold text-[var(--landing-forest)]">
+                        Ready
+                      </span>
+                    </div>
+                    <div className="relative aspect-[16/9]">
+                      <Image
                         src={previewUrl}
-                        alt="Schedule preview"
-                        className="max-w-xs rounded-xl ring-1 ring-white/10 shadow-lg"
+                        alt="Preview of the selected schedule screenshot"
+                        fill
+                        unoptimized
+                        className="object-contain p-3"
                       />
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-[2rem] border border-[var(--landing-border-strong)] bg-[var(--landing-surface)] p-5 sm:p-7">
+                <StepHeading
+                  number="03"
+                  title="Pick a color theme"
+                  description="Each class cycles through the closest colors available in Google Calendar."
+                />
+
+                <div
+                  className="mt-6 grid gap-3 sm:grid-cols-2"
+                  role="radiogroup"
+                  aria-label="Calendar color theme"
+                >
+                  {PALETTES.map((palette) => {
+                    const selected = selectedPalette?.name === palette.name;
+                    return (
+                      <button
+                        type="button"
+                        key={palette.name}
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setSelectedPalette(palette)}
+                        className={`min-h-28 cursor-pointer rounded-2xl border p-4 text-left outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[var(--landing-focus)] focus-visible:ring-offset-2 ${
+                          selected
+                            ? "border-[var(--landing-forest)] bg-[var(--landing-sage)]"
+                            : "border-[var(--landing-border)] bg-[var(--landing-bg)] hover:border-[var(--landing-border-strong)] hover:bg-[var(--landing-surface)]"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="text-sm font-semibold">
+                            {palette.name}
+                          </span>
+                          <span
+                            className={`inline-flex min-w-16 items-center justify-end gap-1 text-xs font-semibold ${
+                              selected
+                                ? "text-[var(--landing-forest)]"
+                                : "text-[var(--landing-muted)]"
+                            }`}
+                          >
+                            {selected && <CheckIcon />}
+                            {selected ? "Selected" : "Choose"}
+                          </span>
+                        </div>
+                        <Swatches colors={palette.colors} className="mt-5" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {status && (
+                <div
+                  ref={statusRef}
+                  tabIndex={-1}
+                  role={status.kind === "error" ? "alert" : "status"}
+                  className={`rounded-2xl border px-5 py-4 text-sm font-medium outline-none focus:ring-2 focus:ring-[var(--landing-focus)] ${
+                    status.kind === "success"
+                      ? "border-[var(--landing-border-strong)] bg-[var(--landing-sage)] text-[var(--landing-forest)]"
+                      : "border-[var(--landing-clay)] bg-[var(--landing-clay-soft)] text-[var(--landing-clay-dark)]"
+                  }`}
+                >
+                  {status.message}
+                </div>
+              )}
+
+              <div className="rounded-[2rem] bg-[var(--landing-forest)] p-5 text-white sm:p-7">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold">
+                      Ready to build your calendar?
+                    </h2>
+                    <p className="mt-1 text-sm leading-6 text-white/75">
+                      Reading the screenshot and creating events can take a
+                      moment.
+                    </p>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="inline-flex min-h-12 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full bg-[var(--landing-bg)] px-6 py-3 font-semibold text-[var(--landing-ink)] outline-none transition-colors duration-200 hover:bg-white focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--landing-forest)] disabled:cursor-wait disabled:opacity-70"
+                  >
+                    {loading ? (
+                      <>
+                        <SpinnerIcon />
+                        Creating events…
+                      </>
+                    ) : (
+                      <>
+                        Submit &amp; sync
+                        <ArrowIcon />
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p
+                  className="mt-3 min-h-5 text-sm text-white/75"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {loading
+                    ? "Reading your schedule and adding recurring events to Google Calendar."
+                    : ""}
+                </p>
+              </div>
+            </div>
+
+            <aside className="lg:sticky lg:top-6">
+              <div className="rounded-[2rem] border border-[var(--landing-border-strong)] bg-[var(--landing-surface)] p-5 sm:p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--landing-clay-dark)]">
+                  Your setup
+                </p>
+                <h2 className="mt-3 text-2xl font-semibold tracking-[-0.035em]">
+                  A quick review
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[var(--landing-muted)]">
+                  These choices will be used when CalSnap creates your recurring
+                  events.
+                </p>
+
+                <div className="mt-6 overflow-hidden rounded-2xl border border-[var(--landing-border)] bg-[var(--landing-bg)]">
+                  {previewUrl && fileType?.startsWith("image/") ? (
+                    <div className="relative aspect-[4/3]">
+                      <Image
+                        src={previewUrl}
+                        alt="Small preview of the selected schedule"
+                        fill
+                        unoptimized
+                        className="object-contain p-3"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex aspect-[4/3] flex-col items-center justify-center px-6 text-center">
+                      <span className="flex h-12 w-12 items-center justify-center rounded-[42%_58%_55%_45%/54%_43%_57%_46%] bg-[var(--landing-sage)] text-[var(--landing-forest)]">
+                        <ScheduleIcon />
+                      </span>
+                      <p className="mt-4 text-sm font-semibold">
+                        Your schedule preview will appear here
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-[var(--landing-muted)]">
+                        Add an image in step two.
+                      </p>
                     </div>
                   )}
                 </div>
-              </li>
 
-              {/* Step 3: color theme */}
-              <li className="flex gap-3 items-start">
-                <StepBadge n={3} />
-                <div className="w-full">
-                  <div className="font-medium">Pick a color theme</div>
-                  <p className="mt-1 text-slate-400 text-xs">
-                    Your classes cycle through these colors on Google Calendar.
-                  </p>
-                  <div
-                    className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3"
-                    role="radiogroup"
-                    aria-label="Color theme"
-                  >
-                    {PALETTES.map((palette) => {
-                      const selected = selectedPalette?.name === palette.name;
-                      return (
-                        <button
-                          type="button"
-                          key={palette.name}
-                          role="radio"
-                          aria-checked={selected}
-                          onClick={() => setSelectedPalette(palette)}
-                          className={`text-left rounded-xl p-3 ring-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-                            selected
-                              ? "ring-blue-400/70 bg-blue-500/10"
-                              : "ring-white/10 bg-white/[0.02] hover:bg-white/[0.05]"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">{palette.name}</span>
-                            {selected && (
-                              <span className="text-[11px] text-blue-300">Selected</span>
-                            )}
-                          </div>
-                          <Swatches colors={palette.colors} className="mt-2" />
-                        </button>
-                      );
-                    })}
+                <dl className="mt-6 divide-y divide-[var(--landing-border)]">
+                  <SummaryRow
+                    term="Timezone"
+                    detail={timezoneLabel}
+                    supporting={selectedTimezone}
+                  />
+                  <SummaryRow
+                    term="Schedule image"
+                    detail={fileName ?? "Not uploaded"}
+                    supporting={fileName ? "Ready to read" : "Required"}
+                  />
+                  <div className="py-4">
+                    <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--landing-muted)]">
+                      Color theme
+                    </dt>
+                    <dd className="mt-2 text-sm font-semibold">
+                      {selectedPalette?.name ?? "Google default colors"}
+                    </dd>
+                    {selectedPalette && (
+                      <Swatches
+                        colors={selectedPalette.colors}
+                        className="mt-3"
+                      />
+                    )}
                   </div>
-                </div>
-              </li>
-            </ol>
+                </dl>
 
-            {status && (
-              <p
-                role="status"
-                className={`mt-6 rounded-xl px-4 py-3 text-sm ring-1 ${
-                  status.kind === "success"
-                    ? "bg-emerald-500/10 text-emerald-200 ring-emerald-400/30"
-                    : "bg-rose-500/10 text-rose-200 ring-rose-400/30"
-                }`}
-              >
-                {status.message}
-              </p>
-            )}
-
-            <div className="mt-8">
-              <button
-                type="submit"
-                className="inline-flex w-full items-center justify-center rounded-xl px-5 py-3 text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-500 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 active:scale-[0.99] transition"
-              >
-                Submit &amp; Sync
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Right column: summary card */}
-        <aside className="space-y-6">
-          <div className="rounded-2xl ring-1 ring-white/10 bg-white/[0.03] p-6 lg:sticky lg:top-10">
-            <h2 className="text-lg font-semibold">What you&apos;ll get</h2>
-            <p className="mt-2 text-sm text-slate-300">
-              A clean set of events added to your Google Calendar with your chosen
-              theme colors and correct recurrence.
-            </p>
-
-            <div className="mt-6 space-y-3 text-sm">
-              <div className="rounded-xl bg-white/[0.04] ring-1 ring-white/10 p-3">
-                <div className="text-slate-400">Selected theme</div>
-                <div className="mt-1 font-medium">
-                  {selectedPalette?.name ?? "None (default colors)"}
-                </div>
-                {selectedPalette && (
-                  <Swatches colors={selectedPalette.colors} className="mt-2" />
-                )}
-              </div>
-              <div className="rounded-xl bg-white/[0.04] ring-1 ring-white/10 p-3">
-                <div className="text-slate-400">Schedule image</div>
-                <div className="mt-1 font-medium">
-                  {previewUrl ? "Ready" : "Not uploaded yet"}
+                <div className="mt-2 rounded-2xl bg-[var(--landing-sage)] p-4 text-sm leading-6 text-[var(--landing-forest)]">
+                  Google Calendar supports 11 event colors. CalSnap maps your
+                  chosen palette to the closest available colors.
                 </div>
               </div>
-            </div>
-
-            <p className="mt-4 text-xs text-slate-500">
-              Google Calendar supports 11 event colors, so each theme color maps to
-              the closest one.
-            </p>
+            </aside>
           </div>
-        </aside>
+        </form>
+      </main>
+    </div>
+  );
+}
+
+function StepHeading({
+  number,
+  title,
+  description,
+}: {
+  number: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-4">
+      <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[42%_58%_55%_45%/54%_43%_57%_46%] bg-[var(--landing-sage)] text-sm font-semibold text-[var(--landing-forest)]">
+        {number}
+      </span>
+      <div>
+        <h2 className="text-xl font-semibold tracking-[-0.025em]">{title}</h2>
+        <p className="mt-1 text-sm leading-6 text-[var(--landing-muted)]">
+          {description}
+        </p>
       </div>
-    </form>
+    </div>
   );
 }
 
-function StepBadge({ n }: { n: number }) {
+function SummaryRow({
+  term,
+  detail,
+  supporting,
+}: {
+  term: string;
+  detail: string;
+  supporting: string;
+}) {
   return (
-    <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/30">
-      {n}
-    </span>
+    <div className="py-4">
+      <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--landing-muted)]">
+        {term}
+      </dt>
+      <dd className="mt-2 break-words text-sm font-semibold">{detail}</dd>
+      <dd className="mt-1 text-xs text-[var(--landing-muted)]">{supporting}</dd>
+    </div>
   );
 }
 
-function Swatches({ colors, className = "" }: { colors: string[]; className?: string }) {
+function Swatches({
+  colors,
+  className = "",
+}: {
+  colors: string[];
+  className?: string;
+}) {
   return (
-    <div className={`flex flex-wrap gap-1.5 ${className}`}>
-      {colors.map((c, i) => (
+    <div className={`flex flex-wrap gap-2 ${className}`} aria-hidden="true">
+      {colors.map((color, index) => (
         <span
-          key={`${c}-${i}`}
-          title={c}
-          className="h-5 w-5 rounded-full ring-1 ring-white/20"
-          style={{ backgroundColor: c }}
+          key={`${color}-${index}`}
+          className="h-6 w-6 rounded-full border border-black/10"
+          style={{ backgroundColor: color }}
         />
       ))}
     </div>
   );
 }
 
-export default function Form() {
-  // useSearchParams requires a Suspense boundary in the Next.js app router.
+function BrandMark() {
   return (
-    <Suspense fallback={<Loading />}>
-      <FormInner />
-    </Suspense>
+    <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-[42%_58%_55%_45%/54%_43%_57%_46%] bg-[var(--landing-forest)] text-white">
+      <CalendarIcon />
+    </span>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="4" y="5.5" width="16" height="14" rx="3" />
+      <path d="M8 3.5v4M16 3.5v4M4 10h16M8 14h3M14 14h2M8 17h2" />
+    </svg>
+  );
+}
+
+function ScheduleIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M7 3.5h8l4 4v13H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z" />
+      <path d="M15 3.5v4h4M9 12h6M9 15.5h6" />
+    </svg>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 16V4M7.5 8.5 12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--landing-muted)]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m6 8 4 4 4-4" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m4 10 4 4 8-9" />
+    </svg>
+  );
+}
+
+function ArrowIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 10h12M11 5l5 5-5 5" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M16 10H4M9 5l-5 5 5 5" />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-5 w-5 animate-spin"
+      fill="none"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke="currentColor"
+        strokeWidth="3"
+        opacity="0.25"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }

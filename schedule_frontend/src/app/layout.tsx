@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CalSnap — Schedule screenshot to Google Calendar",
+  title: "CalSnap — Turn your class schedule into a calendar",
   description:
-    "Turn a class schedule screenshot into a polished, color-themed Google Calendar in minutes.",
+    "Upload a class schedule screenshot and create recurring Google Calendar events with the right times, meeting days, rooms, and colors.",
 };
 
 export default function RootLayout({
