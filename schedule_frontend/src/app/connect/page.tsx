@@ -96,6 +96,11 @@ export default async function Connect({
               title="Schedule image processing"
               description="After you upload a schedule, its image is sent to Google Cloud Vision and OpenAI to extract class details. Your Google token and existing Calendar event data are not sent to those services."
             />
+            <Disclosure
+              number="04"
+              title="One use every four months"
+              description="Each individual may complete one successful schedule conversion during a rolling four-month period. Failed attempts that create no events do not use the allowance."
+            />
           </div>
 
           <div className="mt-8 rounded-2xl bg-[var(--landing-sage)] p-4 text-sm leading-6 text-[var(--landing-forest)]">

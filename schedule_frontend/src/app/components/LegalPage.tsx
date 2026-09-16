@@ -45,7 +45,7 @@ export default function LegalPage({
           {introduction}
         </p>
         <p className="mt-4 text-sm font-medium text-[var(--landing-muted)]">
-          Last updated: August 31, 2026
+          Effective and last updated: September 15, 2026
         </p>
 
         <div className="legal-content mt-12 space-y-10 border-t border-[var(--landing-border-strong)] pt-10">

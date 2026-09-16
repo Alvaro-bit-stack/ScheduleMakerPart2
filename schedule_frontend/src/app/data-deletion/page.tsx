@@ -50,9 +50,23 @@ export default function DataDeletionPage() {
       </section>
 
       <section>
+        <h2>Usage-limit and security information</h2>
+        <p className="mt-3">
+          CalSnap may retain the minimum technical or pseudonymous information
+          reasonably necessary to administer the rolling four-month usage
+          allowance, protect the service, investigate abuse, and comply with
+          law. You may request deletion of eligible information, but deletion
+          does not reset the usage allowance or permit circumvention of service
+          limits.
+        </p>
+      </section>
+
+      <section>
         <h2>Request help</h2>
         <p className="mt-3">
-          If you need help confirming deletion, open a request in the{" "}
+          For a non-public deletion request, use the user-support contact shown
+          on CalSnap&apos;s Google OAuth consent screen. General questions can
+          be submitted through the{" "}
           <a
             href="https://github.com/Alvaro-bit-stack/ScheduleMakerPart2/issues"
             rel="noreferrer"
@@ -60,7 +74,8 @@ export default function DataDeletionPage() {
           >
             CalSnap project support tracker
           </a>
-          .
+          . Do not include OAuth tokens, schedule images, class locations, or
+          other private information in a public issue.
         </p>
       </section>
     </LegalPage>
