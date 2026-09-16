@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Connect Google Calendar — CalSnap",
+  title: "Connect Google Calendar — Schedulr",
   description:
-    "Review how CalSnap uses Google Calendar access before continuing to Google.",
+    "Review how Schedulr uses Google Calendar access before continuing to Google.",
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -19,7 +19,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   session_expired:
     "Your short-lived Calendar session expired. Connect again to continue.",
   revocation_failed:
-    "Your local session was removed, but Google could not confirm revocation. You can also remove CalSnap from your Google Account permissions.",
+    "Your local session was removed, but Google could not confirm revocation. You can also remove Schedulr from your Google Account permissions.",
 };
 
 export default async function Connect({
@@ -47,7 +47,7 @@ export default async function Connect({
             href="/"
             className="text-lg font-semibold tracking-[-0.03em] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--landing-focus)]"
           >
-            CalSnap
+            Schedulr
           </Link>
           <Link
             href="/"
@@ -67,7 +67,7 @@ export default async function Connect({
             You stay in control of your calendar.
           </h1>
           <p className="mt-5 text-lg leading-8 text-[var(--landing-muted)]">
-            CalSnap asks for the narrow Calendar permission needed to create the
+            Schedulr asks for the narrow Calendar permission needed to create the
             recurring class events you request.
           </p>
 
@@ -84,12 +84,12 @@ export default async function Connect({
             <Disclosure
               number="01"
               title="Calendar permission"
-              description="Google's permission can view and edit events on calendars you own. CalSnap uses it only to create the schedule events you submit."
+              description="Google's permission can view and edit events on calendars you own. Schedulr uses it only to create the schedule events you submit."
             />
             <Disclosure
               number="02"
               title="Short-lived secure access"
-              description="Your Google access token is encrypted in an HttpOnly cookie, is unavailable to page JavaScript, and expires in about one hour. CalSnap does not request a refresh token."
+              description="Your Google access token is encrypted in an HttpOnly cookie, is unavailable to page JavaScript, and expires in about one hour. Schedulr does not request a refresh token."
             />
             <Disclosure
               number="03"
@@ -104,7 +104,7 @@ export default async function Connect({
           </div>
 
           <div className="mt-8 rounded-2xl bg-[var(--landing-sage)] p-4 text-sm leading-6 text-[var(--landing-forest)]">
-            You can disconnect from the setup page at any time. CalSnap will
+            You can disconnect from the setup page at any time. Schedulr will
             revoke the active token and delete its local session cookie.
           </div>
 

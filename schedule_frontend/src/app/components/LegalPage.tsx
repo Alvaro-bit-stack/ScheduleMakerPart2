@@ -23,7 +23,7 @@ export default function LegalPage({
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-[42%_58%_55%_45%/54%_43%_57%_46%] bg-[var(--landing-forest)] text-white">
               <CalendarIcon />
             </span>
-            <span className="text-lg font-semibold tracking-[-0.03em]">CalSnap</span>
+            <span className="text-lg font-semibold tracking-[-0.03em]">Schedulr</span>
           </Link>
           <Link
             href="/"

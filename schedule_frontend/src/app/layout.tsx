@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CalSnap — Turn your class schedule into a calendar",
+  title: "Schedulr — Turn your class schedule into a calendar",
   description:
     "Upload a class schedule screenshot and create recurring Google Calendar events with the right times, meeting days, rooms, and colors.",
 };

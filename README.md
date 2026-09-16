@@ -1,6 +1,6 @@
-# CalSnap — Schedule screenshot → Google Calendar
+# Schedulr — Schedule screenshot → Google Calendar
 
-CalSnap turns a class-schedule screenshot into recurring, color-themed Google
+Schedulr turns a class-schedule screenshot into recurring, color-themed Google
 Calendar events.
 
 - **`schedule_frontend/`** — Next.js, React, and Tailwind. Handles the landing
@@ -11,7 +11,7 @@ Calendar events.
 
 ## Google Calendar access
 
-CalSnap requests
+Schedulr requests
 `https://www.googleapis.com/auth/calendar.events.owned`, which is narrower than
 full Calendar access and limits event management to calendars the user owns.
 The current implementation:

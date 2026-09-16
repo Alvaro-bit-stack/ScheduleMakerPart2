@@ -5,7 +5,7 @@ const steps = [
     number: "01",
     title: "Connect your calendar",
     description:
-      "Sign in with Google so CalSnap can add the finished schedule directly to your calendar.",
+      "Sign in with Google so Schedulr can add the finished schedule directly to your calendar.",
   },
   {
     number: "02",
@@ -37,10 +37,10 @@ export default function Home() {
           <Link
             href="/"
             className="flex min-h-11 items-center gap-3 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--landing-focus)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--landing-bg)]"
-            aria-label="CalSnap home"
+            aria-label="Schedulr home"
           >
             <BrandMark />
-            <span className="text-lg font-semibold tracking-[-0.03em]">CalSnap</span>
+            <span className="text-lg font-semibold tracking-[-0.03em]">Schedulr</span>
           </Link>
 
           <nav
@@ -96,7 +96,7 @@ export default function Home() {
                 Your class schedule, without the busywork.
               </h1>
               <p className="mt-6 max-w-lg text-pretty text-lg leading-8 text-[var(--landing-muted)]">
-                Turn one screenshot into a complete Google Calendar. CalSnap
+                Turn one screenshot into a complete Google Calendar. Schedulr
                 reads your class times, meeting days, and rooms so you do not
                 have to enter them one by one.
               </p>
@@ -217,7 +217,7 @@ export default function Home() {
 
             <div className="max-w-lg lg:justify-self-end">
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--landing-clay-dark)]">
-                What CalSnap carries over
+                What Schedulr carries over
               </p>
               <h2 className="mt-4 text-balance text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-4xl">
                 The useful details stay attached.
@@ -266,7 +266,7 @@ export default function Home() {
                 Give yourself one less thing to organize.
               </h2>
               <p className="mx-auto mt-4 max-w-xl leading-7 text-white/75">
-                Connect Google Calendar, upload your schedule, and let CalSnap
+                Connect Google Calendar, upload your schedule, and let Schedulr
                 build the recurring events.
               </p>
               <a
@@ -283,7 +283,7 @@ export default function Home() {
 
       <footer className="border-t border-[var(--landing-border)]">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-8 text-sm text-[var(--landing-muted)] sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
-          <span className="font-semibold text-[var(--landing-ink)]">CalSnap</span>
+          <span className="font-semibold text-[var(--landing-ink)]">Schedulr</span>
           <nav aria-label="Legal links" className="flex flex-wrap gap-x-5 gap-y-2">
             <Link className="underline underline-offset-4" href="/privacy">
               Privacy
@@ -295,7 +295,7 @@ export default function Home() {
               Data deletion
             </Link>
           </nav>
-          <span>© {new Date().getFullYear()} CalSnap</span>
+          <span>© {new Date().getFullYear()} Schedulr</span>
         </div>
       </footer>
     </div>

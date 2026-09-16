@@ -187,10 +187,10 @@ export default function Form() {
           <Link
             href="/"
             className="flex min-h-11 items-center gap-3 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--landing-focus)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--landing-bg)]"
-            aria-label="Back to CalSnap home"
+            aria-label="Back to Schedulr home"
           >
             <BrandMark />
-            <span className="text-lg font-semibold tracking-[-0.03em]">CalSnap</span>
+            <span className="text-lg font-semibold tracking-[-0.03em]">Schedulr</span>
           </Link>
           <div className="flex items-center gap-1">
             <Link
@@ -473,7 +473,7 @@ export default function Form() {
                   A quick review
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-[var(--landing-muted)]">
-                  These choices will be used when CalSnap creates your recurring
+                  These choices will be used when Schedulr creates your recurring
                   events.
                 </p>
 
@@ -531,7 +531,7 @@ export default function Form() {
                 </dl>
 
                 <div className="mt-2 rounded-2xl bg-[var(--landing-sage)] p-4 text-sm leading-6 text-[var(--landing-forest)]">
-                  Google Calendar supports 11 event colors. CalSnap maps your
+                  Google Calendar supports 11 event colors. Schedulr maps your
                   chosen palette to the closest available colors.
                 </div>
               </div>
