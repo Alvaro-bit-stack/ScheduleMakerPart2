@@ -27,8 +27,20 @@ FastAPI backend that OCRs a schedule image, parses classes, and creates Google C
 
 ### Run
 ```bash
-uvicorn main:app --reload --port 8001 --host 0.0.0.0
+uvicorn main:app --reload --port 8000 --host 0.0.0.0
 ```
+
+### Deploy on Render
+
+Set the service root directory to `schedule_backend` and use:
+
+```text
+Build Command: pip install -r requirements.txt
+Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+The `.python-version` file pins Render to Python 3.13 so dependencies install
+from prebuilt wheels instead of compiling on the free build instance.
 
 ### Notes
 - The repository ignores any local `venv/`, `Lib/`, and `Scripts/` folders so they are not committed.
