@@ -41,7 +41,33 @@ export function createGoogleOAuthClient() {
   );
 }
 
+function getAllowedAppOrigins(): Set<string> {
+  const configuredUrl = new URL(getAppUrl());
+  const allowedOrigins = new Set([configuredUrl.origin]);
+  const isLocal =
+    configuredUrl.hostname === "localhost" ||
+    configuredUrl.hostname === "127.0.0.1";
+
+  if (!isLocal) {
+    const alternateUrl = new URL(configuredUrl.origin);
+    alternateUrl.hostname = configuredUrl.hostname.startsWith("www.")
+      ? configuredUrl.hostname.slice(4)
+      : `www.${configuredUrl.hostname}`;
+    allowedOrigins.add(alternateUrl.origin);
+  }
+
+  return allowedOrigins;
+}
+
 export function requestHasExpectedOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
-  return !origin || origin === getAppUrl();
+  if (!origin) {
+    return true;
+  }
+
+  try {
+    return getAllowedAppOrigins().has(new URL(origin).origin);
+  } catch {
+    return false;
+  }
 }
