@@ -15,7 +15,7 @@ from PIL import Image, UnidentifiedImageError
 
 from google_calendar import set_up_and_create_events
 from ocr import OCRProcessingError, run_ocr
-from schedule_extractor import extract_classes
+from schedule_extractor import AmbiguousMeetingDaysError, extract_classes
 
 load_dotenv()
 
@@ -182,6 +182,18 @@ async def upload_schedule(
         raise HTTPException(
             status_code=502,
             detail="OpenAI could not extract the schedule details.",
+        ) from error
+    except AmbiguousMeetingDaysError as error:
+        logger.warning(
+            "schedule_upload_failed service=schedule_parser error_type=%s",
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "The meeting days could not be identified confidently. "
+                "Upload a clearer image showing the selected day boxes."
+            ),
         ) from error
     except ValueError as error:
         logger.warning(
