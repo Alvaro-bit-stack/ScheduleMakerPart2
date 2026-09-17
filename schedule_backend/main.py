@@ -1,3 +1,4 @@
+import logging
 import os
 import secrets
 import warnings
@@ -19,6 +20,7 @@ from schedule_extractor import extract_classes
 load_dotenv()
 
 app = FastAPI()
+logger = logging.getLogger("schedulr.api")
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + 1024 * 1024
@@ -146,7 +148,13 @@ async def upload_schedule(
             palette,
         )
     except HttpError as error:
-        if getattr(error.resp, "status", None) in {401, 403}:
+        status = getattr(error.resp, "status", None)
+        logger.warning(
+            "schedule_upload_failed service=google_calendar error_type=%s status=%s",
+            type(error).__name__,
+            status,
+        )
+        if status in {401, 403}:
             raise HTTPException(
                 status_code=401,
                 detail="Google Calendar authorization expired or was denied.",
@@ -155,12 +163,31 @@ async def upload_schedule(
             status_code=502,
             detail="Google Calendar could not create the events.",
         ) from error
-    except (GoogleAPICallError, OCRProcessingError, APIError) as error:
+    except (GoogleAPICallError, OCRProcessingError) as error:
+        logger.warning(
+            "schedule_upload_failed service=google_vision error_type=%s",
+            type(error).__name__,
+        )
         raise HTTPException(
             status_code=502,
-            detail="The schedule extraction service is temporarily unavailable.",
+            detail="Google Cloud Vision could not read the schedule image.",
+        ) from error
+    except APIError as error:
+        logger.warning(
+            "schedule_upload_failed service=openai error_type=%s status=%s code=%s",
+            type(error).__name__,
+            getattr(error, "status_code", None),
+            getattr(error, "code", None),
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="OpenAI could not extract the schedule details.",
         ) from error
     except ValueError as error:
+        logger.warning(
+            "schedule_upload_failed service=schedule_parser error_type=%s",
+            type(error).__name__,
+        )
         raise HTTPException(
             status_code=422,
             detail="The schedule could not be parsed safely.",

@@ -194,9 +194,25 @@ export async function POST(request: NextRequest) {
       if (backendResponse.status === 401) {
         return unauthorizedResponse();
       }
+
+      let backendMessage = "The schedule could not be processed. Please try again.";
+      try {
+        const backendError: unknown = await backendResponse.json();
+        if (
+          typeof backendError === "object" &&
+          backendError !== null &&
+          "detail" in backendError &&
+          typeof backendError.detail === "string"
+        ) {
+          backendMessage = backendError.detail;
+        }
+      } catch {
+        // Keep the generic message when the backend does not return JSON.
+      }
+
       return NextResponse.json(
-        { error: "The schedule could not be processed. Please try again." },
-        { status: 502 },
+        { error: backendMessage },
+        { status: backendResponse.status },
       );
     }
 
